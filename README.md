@@ -29,12 +29,14 @@ Make sure you have the following installed on your system:
      export LIBCLANG_PATH=/usr/local/opt/llvm/lib
      ```
 
+
 ## Usage
 
 To use the package, [provide a brief description of how to run your package, e.g., command line usage, function calls, etc.]. 
 
 ```bash
 # Example command
+cp target/release/headshot ~/.local/bin/
 headshot --input your-image.jpg --output output-image.jpg
 ```
 
