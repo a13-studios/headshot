@@ -1,0 +1,9 @@
+[package]
+name = "headshot"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+indicatif = "0.17.11"
+opencv = "0.94.2"
+clap = { version = "4.1", features = ["derive"] }
