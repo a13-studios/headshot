@@ -3,3 +3,8 @@ inputs/*
 outputs/*
 **/*.rs.bk
 Cargo.lock
+.DS_Store
+.idea
+.vscode
+.env
+.env.local
