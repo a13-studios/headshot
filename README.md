@@ -12,8 +12,7 @@ Make sure you have the following installed on your system:
 1. Install LLVM using Homebrew:
 
    ```bash
-   brew install llvm
-   brew install opencv
+   brew install opencv cmake llvm qt tesseract
    ```
 
 2. Set the necessary environment variable based on your architecture:
