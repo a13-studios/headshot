@@ -13,6 +13,7 @@ Make sure you have the following installed on your system:
 
    ```bash
    brew install llvm
+   brew install opencv
    ```
 
 2. Set the necessary environment variable based on your architecture:
