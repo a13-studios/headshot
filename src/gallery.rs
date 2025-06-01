@@ -1,11 +1,11 @@
+use crossbeam::channel::{Receiver, Sender, unbounded};
 use eframe::egui;
 use egui_extras::{Column, TableBuilder};
-use std::path::{Path, PathBuf};
-use std::collections::HashMap;
-use crossbeam::channel::{unbounded, Receiver, Sender};
-use std::thread;
 use lru::LruCache;
+use std::collections::HashMap;
 use std::num::NonZeroUsize;
+use std::path::{Path, PathBuf};
+use std::thread;
 
 #[derive(Clone)]
 pub struct PhotoEntry {
@@ -54,7 +54,7 @@ impl Gallery {
 
     pub fn load_images_from_directory<P: AsRef<Path>>(&mut self, dir: P) {
         let dir = dir.as_ref().to_path_buf();
-        
+
         // Clear existing photos
         self.photos.clear();
         self.photo_map.clear();
@@ -67,7 +67,10 @@ impl Gallery {
                 let path = entry.path();
                 if let Some(ext) = path.extension() {
                     let ext = ext.to_string_lossy().to_lowercase();
-                    if matches!(ext.as_str(), "jpg" | "jpeg" | "png" | "bmp" | "tiff" | "webp") {
+                    if matches!(
+                        ext.as_str(),
+                        "jpg" | "jpeg" | "png" | "bmp" | "tiff" | "webp"
+                    ) {
                         let photo = PhotoEntry::new(path.clone());
                         self.photo_map.insert(path.clone(), self.photos.len());
                         self.photos.push(photo);
@@ -79,19 +82,19 @@ impl Gallery {
         // Start background thumbnail generation
         if let Some(tx) = self.thumb_sender.clone() {
             let photos_paths: Vec<PathBuf> = self.photos.iter().map(|p| p.path.clone()).collect();
-            
+
             thread::spawn(move || {
                 for path in photos_paths {
                     if let Ok(img) = image::open(&path) {
                         // Create thumbnail (max 128px on the longest side)
                         let thumb = img.thumbnail(128, 128);
                         let rgba = thumb.to_rgba8();
-                        
+
                         let color_img = egui::ColorImage::from_rgba_unmultiplied(
                             [rgba.width() as usize, rgba.height() as usize],
                             rgba.as_flat_samples().as_slice(),
                         );
-                        
+
                         if tx.send((path, color_img)).is_err() {
                             break; // Channel closed
                         }
@@ -108,27 +111,22 @@ impl Gallery {
             while let Ok((path, color_img)) = rx.try_recv() {
                 if let Some(&index) = self.photo_map.get(&path) {
                     let tex_name = format!("thumb_{}", path.to_string_lossy());
-                    let texture = ctx.load_texture(
-                        tex_name,
-                        color_img,
-                        egui::TextureOptions::LINEAR,
-                    );
-                    
+                    let texture =
+                        ctx.load_texture(tex_name, color_img, egui::TextureOptions::LINEAR);
+
                     // Update photo entry
                     if let Some(photo) = self.photos.get_mut(index) {
                         photo.thumb_tex = Some(texture.clone());
-                        photo.thumb_size = egui::Vec2::new(
-                            texture.size()[0] as f32,
-                            texture.size()[1] as f32,
-                        );
+                        photo.thumb_size =
+                            egui::Vec2::new(texture.size()[0] as f32, texture.size()[1] as f32);
                     }
-                    
+
                     // Cache the texture
                     self.texture_cache.put(path, texture);
                     any_received = true;
                 }
             }
-            
+
             if any_received {
                 ctx.request_repaint();
             }
@@ -145,7 +143,7 @@ impl Gallery {
 
     pub fn show(&mut self, ctx: &egui::Context) -> bool {
         let mut gallery_open = true;
-        
+
         egui::Window::new("Gallery")
             .resizable(true)
             .default_size([800.0, 600.0])
@@ -184,21 +182,25 @@ impl Gallery {
                                             if let Some(tex) = &photo.thumb_tex {
                                                 let response = ui.add_sized(
                                                     [120.0, 120.0],
-                                                    egui::ImageButton::new(tex)
+                                                    egui::ImageButton::new(tex),
                                                 );
-                                                
+
                                                 if response.clicked() {
                                                     self.selected_photo = Some(photo_index);
                                                     self.show_lightbox = true;
                                                 }
-                                                
+
                                                 if response.hovered() {
-                                                    response.on_hover_text(photo.path.file_name()
-                                                        .unwrap_or_default()
-                                                        .to_string_lossy()
-                                                        .to_string());
+                                                    response.on_hover_text(
+                                                        photo
+                                                            .path
+                                                            .file_name()
+                                                            .unwrap_or_default()
+                                                            .to_string_lossy()
+                                                            .to_string(),
+                                                    );
                                                 }
-                                                
+
                                                 photo.last_accessed = std::time::Instant::now();
                                             } else {
                                                 // Placeholder while loading
@@ -226,7 +228,7 @@ impl Gallery {
 
     fn show_lightbox_window(&mut self, ctx: &egui::Context) {
         let mut lightbox_open = true;
-        
+
         egui::Window::new("Image Viewer")
             .resizable(true)
             .default_size([600.0, 600.0])
@@ -238,19 +240,23 @@ impl Gallery {
                             if ui.button("◀ Previous").clicked() && index > 0 {
                                 self.selected_photo = Some(index - 1);
                             }
-                            
-                            ui.label(photo.path.file_name()
-                                .unwrap_or_default()
-                                .to_string_lossy()
-                                .to_string());
-                            
+
+                            ui.label(
+                                photo
+                                    .path
+                                    .file_name()
+                                    .unwrap_or_default()
+                                    .to_string_lossy()
+                                    .to_string(),
+                            );
+
                             if ui.button("Next ▶").clicked() && index < self.photos.len() - 1 {
                                 self.selected_photo = Some(index + 1);
                             }
                         });
-                        
+
                         ui.separator();
-                        
+
                         // Show the thumbnail for now (could load full-res here)
                         if let Some(tex) = &photo.thumb_tex {
                             let available_size = ui.available_size();
@@ -259,7 +265,7 @@ impl Gallery {
                                 .min(available_size.y / image_size.y)
                                 .min(1.0);
                             let display_size = image_size * scale;
-                            
+
                             ui.centered_and_justified(|ui| {
                                 ui.add_sized(display_size, egui::Image::new(tex));
                             });
@@ -284,4 +290,4 @@ impl Gallery {
     pub fn is_loading(&self) -> bool {
         self.is_loading
     }
-} 
+}

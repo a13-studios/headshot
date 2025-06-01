@@ -1,18 +1,17 @@
+use opencv::core::AlgorithmHint;
+use opencv::{
+    Result,
+    core::{Mat, Rect, Size, Vector},
+    imgcodecs, imgproc,
+    objdetect::CascadeClassifier,
+    prelude::*,
+};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::Sender;
-use opencv::{
-    core::{Rect, Vector, Mat, Size},
-    imgcodecs,
-    imgproc,
-    objdetect::CascadeClassifier,
-    prelude::*,
-    Result,
-};
-use opencv::core::AlgorithmHint;
 
 pub enum ProcessMessage {
-    Progress(String, usize),  // filename, face count for this image
+    Progress(String, usize), // filename, face count for this image
     Complete,
     Error(String),
 }
@@ -45,7 +44,9 @@ pub fn process_images_with_progress(
     if entries.is_empty() {
         let error = "No valid image files found.";
         if let Some(sender) = &progress_sender {
-            sender.send(ProcessMessage::Error(error.to_string())).unwrap_or_default();
+            sender
+                .send(ProcessMessage::Error(error.to_string()))
+                .unwrap_or_default();
         } else {
             eprintln!("{}", error);
         }
@@ -54,10 +55,19 @@ pub fn process_images_with_progress(
 
     // Process each image
     for path in entries {
-        if let Err(e) = process_single_image(&path, dst_dir, &mut face_cascade, &progress_sender, min_neighbors, min_face_size) {
+        if let Err(e) = process_single_image(
+            &path,
+            dst_dir,
+            &mut face_cascade,
+            &progress_sender,
+            min_neighbors,
+            min_face_size,
+        ) {
             let error_msg = format!("Error processing {}: {}", path.display(), e);
             if let Some(sender) = &progress_sender {
-                sender.send(ProcessMessage::Error(error_msg)).unwrap_or_default();
+                sender
+                    .send(ProcessMessage::Error(error_msg))
+                    .unwrap_or_default();
             } else {
                 eprintln!("{}", error_msg);
             }
@@ -68,7 +78,7 @@ pub fn process_images_with_progress(
     if let Some(sender) = progress_sender {
         sender.send(ProcessMessage::Complete).unwrap_or_default();
     }
-    
+
     Ok(())
 }
 
@@ -114,11 +124,11 @@ fn process_single_image(
     min_face_size: i32,
 ) -> Result<()> {
     let filename = path.file_name().unwrap().to_str().unwrap();
-    
+
     // Split filename and extension
     let stem = path.file_stem().unwrap().to_str().unwrap();
     let ext = path.extension().unwrap().to_str().unwrap();
-    
+
     // Load and process image
     let image = imgcodecs::imread(path.to_str().unwrap(), imgcodecs::IMREAD_COLOR)?;
     if image.empty() {
@@ -143,21 +153,26 @@ fn process_single_image(
         1.4,
         min_neighbors,
         0,
-        Size { width: min_face_size, height: min_face_size },
+        Size {
+            width: min_face_size,
+            height: min_face_size,
+        },
         Size::default(),
     )?;
 
     let face_count = faces.len();
-    
+
     if let Some(sender) = progress_sender {
-        sender.send(ProcessMessage::Progress(filename.to_string(), face_count)).unwrap_or_default();
+        sender
+            .send(ProcessMessage::Progress(filename.to_string(), face_count))
+            .unwrap_or_default();
     }
 
     // Process all detected faces
     for face_idx in 0..face_count {
         let face = faces.get(face_idx)?;
         let rect = calculate_padded_rect(&face, &image);
-        
+
         // Crop and save the face
         let face_clip = Mat::roi(&image, rect)?;
         let face_filename = format!("{}/{}_face_{}.{}", dst_dir, stem, face_idx + 1, ext);
@@ -169,14 +184,14 @@ fn process_single_image(
 
 fn calculate_padded_rect(face: &Rect, image: &Mat) -> Rect {
     let padding = ((face.width.max(face.height)) as f64 * 1.1).round() as i32;
-    
+
     let padded_top = (face.y - padding).max(0);
     let padded_left = (face.x - padding).max(0);
     let padded_bottom = (face.y + face.height + padding).min(image.rows());
     let padded_right = (face.x + face.width + padding).min(image.cols());
-    
+
     let roi_width = padded_right - padded_left;
     let roi_height = padded_bottom - padded_top;
-    
+
     Rect::new(padded_left, padded_top, roi_width, roi_height)
-} 
+}

@@ -1,9 +1,9 @@
+use crate::gallery::Gallery;
+use crate::processor::{self, ProcessMessage};
 use eframe::egui;
 use std::path::PathBuf;
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::{Receiver, Sender, channel};
 use std::thread;
-use crate::processor::{self, ProcessMessage};
-use crate::gallery::Gallery;
 
 pub struct HeadshotApp {
     input_path: Option<PathBuf>,
@@ -30,21 +30,26 @@ impl HeadshotApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         // Load fonts
         let mut fonts = egui::FontDefinitions::default();
-        
+
         // Add Inter Regular font
         fonts.font_data.insert(
             "Inter".to_owned(),
-            egui::FontData::from_static(include_bytes!("../assets/fonts/Inter-VariableFont_opsz,wght.ttf")),
+            egui::FontData::from_static(include_bytes!(
+                "../assets/fonts/Inter-VariableFont_opsz,wght.ttf"
+            )),
         );
-        
+
         // Add Inter Italic font
         fonts.font_data.insert(
             "Inter-Italic".to_owned(),
-            egui::FontData::from_static(include_bytes!("../assets/fonts/Inter-Italic-VariableFont_opsz,wght.ttf")),
+            egui::FontData::from_static(include_bytes!(
+                "../assets/fonts/Inter-Italic-VariableFont_opsz,wght.ttf"
+            )),
         );
 
         // Set Inter as the default font for all text styles
-        fonts.families
+        fonts
+            .families
             .get_mut(&egui::FontFamily::Proportional)
             .unwrap()
             .insert(0, "Inter".to_owned());
@@ -78,7 +83,7 @@ impl HeadshotApp {
     fn select_input_folder(&mut self) {
         if let Some(path) = rfd::FileDialog::new()
             .set_title("Select Input Folder")
-            .pick_folder() 
+            .pick_folder()
         {
             self.input_path = Some(path);
             self.error_message = None;
@@ -89,7 +94,7 @@ impl HeadshotApp {
     fn select_output_folder(&mut self) {
         if let Some(path) = rfd::FileDialog::new()
             .set_title("Select Output Folder")
-            .pick_folder() 
+            .pick_folder()
         {
             self.output_path = Some(path);
             self.error_message = None;
@@ -126,8 +131,20 @@ impl HeadshotApp {
             return;
         }
 
-        let input_path = self.input_path.as_ref().unwrap().to_str().unwrap().to_string();
-        let output_path = self.output_path.as_ref().unwrap().to_str().unwrap().to_string();
+        let input_path = self
+            .input_path
+            .as_ref()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
+        let output_path = self
+            .output_path
+            .as_ref()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
         let tx = self.tx.as_ref().unwrap().clone();
         let min_neighbors = self.min_neighbors;
         let min_face_size = self.min_face_size;
@@ -141,8 +158,15 @@ impl HeadshotApp {
         self.current_faces = None;
 
         thread::spawn(move || {
-            if let Err(e) = processor::process_images_with_progress(&input_path, &output_path, Some(tx.clone()), min_neighbors, min_face_size) {
-                tx.send(ProcessMessage::Error(e.to_string())).unwrap_or_default();
+            if let Err(e) = processor::process_images_with_progress(
+                &input_path,
+                &output_path,
+                Some(tx.clone()),
+                min_neighbors,
+                min_face_size,
+            ) {
+                tx.send(ProcessMessage::Error(e.to_string()))
+                    .unwrap_or_default();
             }
         });
     }
@@ -167,7 +191,7 @@ impl HeadshotApp {
                         self.current_file = None;
                         self.current_faces = None;
                         self.processing_complete = true;
-                        
+
                         // Load gallery with processed images
                         if let Some(output_path) = &self.output_path {
                             self.gallery.load_images_from_directory(output_path);
@@ -204,7 +228,7 @@ impl eframe::App for HeadshotApp {
         }
 
         self.check_messages();
-        
+
         // Update gallery
         self.gallery.update(ctx);
 
@@ -218,9 +242,9 @@ impl eframe::App for HeadshotApp {
                     }
                 });
             });
-            
+
             ui.add_space(10.0);
-            
+
             ui.horizontal(|ui| {
                 if ui.button("Select Input Folder").clicked() {
                     self.select_input_folder();
@@ -263,14 +287,22 @@ impl eframe::App for HeadshotApp {
             ui.add_space(10.0);
 
             if self.processing {
-                ui.add(egui::ProgressBar::new(self.progress)
-                    .show_percentage()
-                    .animate(true));
-                ui.label(format!("Processing: {} / {}", self.processed_images, self.total_images));
+                ui.add(
+                    egui::ProgressBar::new(self.progress)
+                        .show_percentage()
+                        .animate(true),
+                );
+                ui.label(format!(
+                    "Processing: {} / {}",
+                    self.processed_images, self.total_images
+                ));
                 ui.label(format!("Total faces detected: {}", self.total_faces));
                 if let Some(current_file) = &self.current_file {
                     if let Some(face_count) = self.current_faces {
-                        ui.label(format!("Current file: {} ({} faces)", current_file, face_count));
+                        ui.label(format!(
+                            "Current file: {} ({} faces)",
+                            current_file, face_count
+                        ));
                     }
                 }
             } else {
@@ -290,14 +322,17 @@ impl eframe::App for HeadshotApp {
                 ui.separator();
                 ui.colored_label(egui::Color32::GREEN, "✓ Processing Complete!");
                 ui.label(format!("Total faces extracted: {}", self.total_faces));
-                
+
                 ui.horizontal(|ui| {
                     if ui.button("📸 View Gallery").clicked() {
                         self.show_gallery = true;
                     }
-                    
+
                     if !self.gallery.is_empty() {
-                        ui.label(format!("({} images in gallery)", self.gallery.photo_count()));
+                        ui.label(format!(
+                            "({} images in gallery)",
+                            self.gallery.photo_count()
+                        ));
                     }
                 });
             }
@@ -313,4 +348,4 @@ impl eframe::App for HeadshotApp {
             ctx.request_repaint();
         }
     }
-} 
+}
