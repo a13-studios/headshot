@@ -19,10 +19,35 @@ pub struct HeadshotApp {
     current_faces: Option<usize>,
     min_neighbors: i32,
     min_face_size: i32,
+    logo_texture: Option<egui::TextureHandle>,
 }
 
 impl HeadshotApp {
-    pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
+    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        // Load fonts
+        let mut fonts = egui::FontDefinitions::default();
+        
+        // Add Inter Regular font
+        fonts.font_data.insert(
+            "Inter".to_owned(),
+            egui::FontData::from_static(include_bytes!("../assets/fonts/Inter-VariableFont_opsz,wght.ttf")),
+        );
+        
+        // Add Inter Italic font
+        fonts.font_data.insert(
+            "Inter-Italic".to_owned(),
+            egui::FontData::from_static(include_bytes!("../assets/fonts/Inter-Italic-VariableFont_opsz,wght.ttf")),
+        );
+
+        // Set Inter as the default font for all text styles
+        fonts.families
+            .get_mut(&egui::FontFamily::Proportional)
+            .unwrap()
+            .insert(0, "Inter".to_owned());
+
+        // Apply the font configuration
+        cc.egui_ctx.set_fonts(fonts);
+
         let (tx, rx) = channel();
         Self {
             input_path: None,
@@ -39,6 +64,7 @@ impl HeadshotApp {
             current_faces: None,
             min_neighbors: 3,
             min_face_size: 500,
+            logo_texture: None,
         }
     }
 
@@ -132,10 +158,34 @@ impl HeadshotApp {
 
 impl eframe::App for HeadshotApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Load logo texture if not loaded yet
+        if self.logo_texture.is_none() {
+            let logo_bytes = include_bytes!("../assets/a13logo_small.png");
+            let image = image::load_from_memory(logo_bytes).unwrap();
+            let size = [image.width() as _, image.height() as _];
+            let image_buffer = image.to_rgba8();
+            let pixels = image_buffer.as_flat_samples();
+            self.logo_texture = Some(ctx.load_texture(
+                "logo",
+                egui::ColorImage::from_rgba_unmultiplied(size, pixels.as_slice()),
+                egui::TextureOptions::default(),
+            ));
+        }
+
         self.check_messages();
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Headshot Image Processor");
+            ui.horizontal(|ui| {
+                ui.heading("Headshot Image Processor");
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if let Some(logo) = &self.logo_texture {
+                        let size = 32.0;
+                        ui.add(egui::Image::new(logo).fit_to_exact_size(egui::vec2(size, size)));
+                    }
+                });
+            });
+            
+            ui.add_space(10.0);
             
             ui.horizontal(|ui| {
                 if ui.button("Select Input Folder").clicked() {
@@ -152,6 +202,9 @@ impl eframe::App for HeadshotApp {
                 }
                 if let Some(path) = &self.output_path {
                     ui.label(format!("Selected: {}", path.display()));
+                    if ui.small_button("❌").clicked() {
+                        self.output_path = None;
+                    }
                 }
             });
 
