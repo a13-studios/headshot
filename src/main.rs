@@ -1,5 +1,6 @@
-mod gui;
 mod processor;
+mod gui;
+mod gallery;
 
 use clap::Parser;
 use eframe::{self, egui};

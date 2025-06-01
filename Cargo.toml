@@ -9,5 +9,8 @@ opencv = "0.94.2"
 clap = { version = "4.1", features = ["derive"] }
 eframe = "0.26.0"
 egui = "0.26.0"
+egui_extras = { version = "0.26.0", features = ["image"] }
 rfd = "0.13.0"  # For native file dialogs
 image = "0.24.8"  # For image processing
+crossbeam = "0.8"
+lru = "0.12"

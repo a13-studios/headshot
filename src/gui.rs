@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
 use crate::processor::{self, ProcessMessage};
+use crate::gallery::Gallery;
 
 pub struct HeadshotApp {
     input_path: Option<PathBuf>,
@@ -20,6 +21,9 @@ pub struct HeadshotApp {
     min_neighbors: i32,
     min_face_size: i32,
     logo_texture: Option<egui::TextureHandle>,
+    gallery: Gallery,
+    show_gallery: bool,
+    processing_complete: bool,
 }
 
 impl HeadshotApp {
@@ -65,6 +69,9 @@ impl HeadshotApp {
             min_neighbors: 3,
             min_face_size: 500,
             logo_texture: None,
+            gallery: Gallery::new(),
+            show_gallery: false,
+            processing_complete: false,
         }
     }
 
@@ -86,6 +93,22 @@ impl HeadshotApp {
         {
             self.output_path = Some(path);
             self.error_message = None;
+        }
+    }
+
+    fn clear_output_folder(&mut self) {
+        if let Some(path) = &self.output_path {
+            if let Ok(entries) = std::fs::read_dir(path) {
+                for entry in entries {
+                    if let Ok(entry) = entry {
+                        if let Ok(file_type) = entry.file_type() {
+                            if file_type.is_file() {
+                                let _ = std::fs::remove_file(entry.path());
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -143,12 +166,20 @@ impl HeadshotApp {
                         self.error_message = None;
                         self.current_file = None;
                         self.current_faces = None;
+                        self.processing_complete = true;
+                        
+                        // Load gallery with processed images
+                        if let Some(output_path) = &self.output_path {
+                            self.gallery.load_images_from_directory(output_path);
+                            self.show_gallery = true;
+                        }
                     }
                     ProcessMessage::Error(error) => {
                         self.processing = false;
                         self.error_message = Some(error);
                         self.current_file = None;
                         self.current_faces = None;
+                        self.processing_complete = false;
                     }
                 }
             }
@@ -173,6 +204,9 @@ impl eframe::App for HeadshotApp {
         }
 
         self.check_messages();
+        
+        // Update gallery
+        self.gallery.update(ctx);
 
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.horizontal(|ui| {
@@ -202,6 +236,14 @@ impl eframe::App for HeadshotApp {
                 }
                 if let Some(path) = &self.output_path {
                     ui.label(format!("Selected: {}", path.display()));
+                    ui.scope(|ui| {
+                        ui.style_mut().visuals.override_text_color = Some(egui::Color32::WHITE);
+                        let clear_button = egui::Button::new("Clear Output")
+                            .fill(egui::Color32::from_rgb(225, 45, 0));
+                        if ui.add(clear_button).clicked() {
+                            self.clear_output_folder();
+                        }
+                    });
                     if ui.small_button("❌").clicked() {
                         self.output_path = None;
                     }
@@ -232,16 +274,42 @@ impl eframe::App for HeadshotApp {
                     }
                 }
             } else {
-                let process_button = egui::Button::new("Process Images")
-                    .fill(egui::Color32::from_rgb(225, 45, 0));
-                if ui.add(process_button).clicked() {
-                    self.process_images();
-                }
+                ui.scope(|ui| {
+                    ui.style_mut().visuals.override_text_color = Some(egui::Color32::WHITE);
+                    let process_button = egui::Button::new("Process Images")
+                        .fill(egui::Color32::from_rgb(225, 45, 0));
+                    if ui.add(process_button).clicked() {
+                        self.process_images();
+                    }
+                });
+            }
+
+            // Show completion status and gallery button
+            if self.processing_complete {
+                ui.add_space(10.0);
+                ui.separator();
+                ui.colored_label(egui::Color32::GREEN, "✓ Processing Complete!");
+                ui.label(format!("Total faces extracted: {}", self.total_faces));
+                
+                ui.horizontal(|ui| {
+                    if ui.button("📸 View Gallery").clicked() {
+                        self.show_gallery = true;
+                    }
+                    
+                    if !self.gallery.is_empty() {
+                        ui.label(format!("({} images in gallery)", self.gallery.photo_count()));
+                    }
+                });
             }
         });
 
-        // Request continuous repaint while processing
-        if self.processing {
+        // Show gallery window if requested
+        if self.show_gallery {
+            self.show_gallery = self.gallery.show(ctx);
+        }
+
+        // Request continuous repaint while processing or gallery is loading
+        if self.processing || self.gallery.is_loading() {
             ctx.request_repaint();
         }
     }
