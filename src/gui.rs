@@ -14,7 +14,11 @@ pub struct HeadshotApp {
     tx: Option<Sender<ProcessMessage>>,
     total_images: usize,
     processed_images: usize,
+    total_faces: usize,
     current_file: Option<String>,
+    current_faces: Option<usize>,
+    min_neighbors: i32,
+    min_face_size: i32,
 }
 
 impl HeadshotApp {
@@ -30,7 +34,11 @@ impl HeadshotApp {
             tx: Some(tx),
             total_images: 0,
             processed_images: 0,
+            total_faces: 0,
             current_file: None,
+            current_faces: None,
+            min_neighbors: 3,
+            min_face_size: 500,
         }
     }
 
@@ -72,15 +80,19 @@ impl HeadshotApp {
         let input_path = self.input_path.as_ref().unwrap().to_str().unwrap().to_string();
         let output_path = self.output_path.as_ref().unwrap().to_str().unwrap().to_string();
         let tx = self.tx.as_ref().unwrap().clone();
+        let min_neighbors = self.min_neighbors;
+        let min_face_size = self.min_face_size;
 
         self.processing = true;
         self.progress = 0.0;
         self.processed_images = 0;
+        self.total_faces = 0;
         self.error_message = None;
         self.current_file = None;
+        self.current_faces = None;
 
         thread::spawn(move || {
-            if let Err(e) = processor::process_images_with_progress(&input_path, &output_path, Some(tx.clone())) {
+            if let Err(e) = processor::process_images_with_progress(&input_path, &output_path, Some(tx.clone()), min_neighbors, min_face_size) {
                 tx.send(ProcessMessage::Error(e.to_string())).unwrap_or_default();
             }
         });
@@ -90,9 +102,11 @@ impl HeadshotApp {
         if let Some(rx) = &self.rx {
             while let Ok(message) = rx.try_recv() {
                 match message {
-                    ProcessMessage::Progress(filename) => {
+                    ProcessMessage::Progress(filename, face_count) => {
                         self.processed_images += 1;
+                        self.total_faces += face_count;
                         self.current_file = Some(filename);
+                        self.current_faces = Some(face_count);
                         if self.total_images > 0 {
                             self.progress = self.processed_images as f32 / self.total_images as f32;
                         }
@@ -102,11 +116,13 @@ impl HeadshotApp {
                         self.progress = 1.0;
                         self.error_message = None;
                         self.current_file = None;
+                        self.current_faces = None;
                     }
                     ProcessMessage::Error(error) => {
                         self.processing = false;
                         self.error_message = Some(error);
                         self.current_file = None;
+                        self.current_faces = None;
                     }
                 }
             }
@@ -143,13 +159,24 @@ impl eframe::App for HeadshotApp {
                 ui.colored_label(egui::Color32::RED, error);
             }
 
+            ui.add_space(10.0);
+            ui.group(|ui| {
+                ui.label("Face Detection Parameters:");
+                ui.add(egui::Slider::new(&mut self.min_neighbors, 3..=25).text("Min Neighbors"));
+                ui.add(egui::Slider::new(&mut self.min_face_size, 10..=1000).text("Min Face Size"));
+            });
+            ui.add_space(10.0);
+
             if self.processing {
                 ui.add(egui::ProgressBar::new(self.progress)
                     .show_percentage()
                     .animate(true));
                 ui.label(format!("Processing: {} / {}", self.processed_images, self.total_images));
+                ui.label(format!("Total faces detected: {}", self.total_faces));
                 if let Some(current_file) = &self.current_file {
-                    ui.label(format!("Current file: {}", current_file));
+                    if let Some(face_count) = self.current_faces {
+                        ui.label(format!("Current file: {} ({} faces)", current_file, face_count));
+                    }
                 }
             } else {
                 let process_button = egui::Button::new("Process Images")

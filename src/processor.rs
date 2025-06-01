@@ -12,19 +12,21 @@ use opencv::{
 use opencv::core::AlgorithmHint;
 
 pub enum ProcessMessage {
-    Progress(String),
+    Progress(String, usize),  // filename, face count for this image
     Complete,
     Error(String),
 }
 
 pub fn process_images(input: &str, output: &str) -> Result<()> {
-    process_images_with_progress(input, output, None)
+    process_images_with_progress(input, output, None, 8, 100)
 }
 
 pub fn process_images_with_progress(
     input: &str,
     output: &str,
     progress_sender: Option<Sender<ProcessMessage>>,
+    min_neighbors: i32,
+    min_face_size: i32,
 ) -> Result<()> {
     let input_path = Path::new(input);
     let dst_dir = output;
@@ -52,7 +54,7 @@ pub fn process_images_with_progress(
 
     // Process each image
     for path in entries {
-        if let Err(e) = process_single_image(&path, dst_dir, &mut face_cascade, &progress_sender) {
+        if let Err(e) = process_single_image(&path, dst_dir, &mut face_cascade, &progress_sender, min_neighbors, min_face_size) {
             let error_msg = format!("Error processing {}: {}", path.display(), e);
             if let Some(sender) = &progress_sender {
                 sender.send(ProcessMessage::Error(error_msg)).unwrap_or_default();
@@ -108,13 +110,15 @@ fn process_single_image(
     dst_dir: &str,
     face_cascade: &mut CascadeClassifier,
     progress_sender: &Option<Sender<ProcessMessage>>,
+    min_neighbors: i32,
+    min_face_size: i32,
 ) -> Result<()> {
     let filename = path.file_name().unwrap().to_str().unwrap();
     
-    if let Some(sender) = progress_sender {
-        sender.send(ProcessMessage::Progress(filename.to_string())).unwrap_or_default();
-    }
-
+    // Split filename and extension
+    let stem = path.file_stem().unwrap().to_str().unwrap();
+    let ext = path.extension().unwrap().to_str().unwrap();
+    
     // Load and process image
     let image = imgcodecs::imread(path.to_str().unwrap(), imgcodecs::IMREAD_COLOR)?;
     if image.empty() {
@@ -137,19 +141,26 @@ fn process_single_image(
         &gray,
         &mut faces,
         1.4,
-        5,
+        min_neighbors,
         0,
-        Size { width: 30, height: 30 },
+        Size { width: min_face_size, height: min_face_size },
         Size::default(),
     )?;
 
-    if faces.len() > 0 {
-        let face = faces.get(0)?;
+    let face_count = faces.len();
+    
+    if let Some(sender) = progress_sender {
+        sender.send(ProcessMessage::Progress(filename.to_string(), face_count)).unwrap_or_default();
+    }
+
+    // Process all detected faces
+    for face_idx in 0..face_count {
+        let face = faces.get(face_idx)?;
         let rect = calculate_padded_rect(&face, &image);
         
         // Crop and save the face
         let face_clip = Mat::roi(&image, rect)?;
-        let face_filename = format!("{}/clip_{}", dst_dir, filename);
+        let face_filename = format!("{}/{}_face_{}.{}", dst_dir, stem, face_idx + 1, ext);
         imgcodecs::imwrite(&face_filename, &face_clip, &Vector::<i32>::new())?;
     }
 

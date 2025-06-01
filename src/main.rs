@@ -26,7 +26,7 @@ fn main() -> opencv::Result<()> {
     if args.gui {
         let options = eframe::NativeOptions {
             viewport: egui::ViewportBuilder::default()
-                .with_inner_size([800.0, 200.0]),
+                .with_inner_size([800.0, 300.0]),
             ..Default::default()
         };
         
